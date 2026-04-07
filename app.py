@@ -1,8 +1,4 @@
 import streamlit as st
-import json
-import os
-from pathlib import Path
-from datetime import date
 
 # ─── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -12,13 +8,23 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Spécialités et icônes ────────────────────────────────────────────────────
-SPECIALTIES = [
-    "Astronomie", "Chimie", "Droit", "Génie des matériaux",
-    "Génie Electrique", "Histoire", "Mathématiques", "Neurosciences",
-    "Philosophie", "Physique", "Psychologie", "Sciences de l'information",
-    "Sciences de la Terre", "Sciences du vivant"
-]
+# ─── Liens Google Drive par spécialité ─────────────────────────────────────────
+SPECIALTY_DRIVE_FOLDERS = {
+    "Astronomie": "https://drive.google.com/drive/folders/1pP5ReGGCa7hl7xvN7Uq2ifaKO_9k7g52",
+    "Chimie": "https://drive.google.com/drive/folders/1QTCIbzqHq_4A7uqsj4xt8zRgQGZYvhwH",
+    "Droit": "https://drive.google.com/drive/folders/1CdRdDuJ8gAMY4HyYtPNMsPDByz7DsqFq",
+    "Génie des matériaux": "https://drive.google.com/drive/folders/1kUEk83-j0G5RvoFTo4tj3xCyvK64Zgq2",
+    "Génie Electrique": "https://drive.google.com/drive/folders/1bj3dQgHBPwfPyvAiYgzsxp64mHExPMSx",
+    "Histoire": "https://drive.google.com/drive/folders/1IFVTa8tV9pE8HruPLhtKWCSkU8O3Qasa",
+    "Mathématiques": "https://drive.google.com/drive/folders/192hXOppB_-0f7TPVGzQId0nb1wxbdsAO",
+    "Neurosciences": "https://drive.google.com/drive/folders/1UP45h2U6_6XVLpnBA-xvo1RltwRWIl5i",
+    "Philosophie": "https://drive.google.com/drive/folders/1LoJz1MZLt3WZ_9dQRziw21kHkdh8r8s_",
+    "Physique": "https://drive.google.com/drive/folders/1TViay4Os-Jyo2f2L592ZfDiBM608ZjL8",
+    "Psychologie": "https://drive.google.com/drive/folders/15xzZQrYc6u43xXsLzlLbyedDaQv2duPd",
+    "Sciences de l'information": "https://drive.google.com/drive/folders/171wR4DVBONV6tvKLoaJMWVePC-hOcflN",
+    "Sciences de la Terre": "https://drive.google.com/drive/folders/1MnAOT99SJt7CVj5SjbQAa-McWg7_isVn",
+    "Sciences du vivant": "https://drive.google.com/drive/folders/1Y8TRFetyqn-KuP_XgaO6MjrYa2_Ku8bP",
+}
 
 SPECIALTY_ICONS = {
     "Astronomie": "🔭", "Chimie": "⚗️", "Droit": "⚖️",
@@ -28,56 +34,7 @@ SPECIALTY_ICONS = {
     "Sciences de la Terre": "🌍", "Sciences du vivant": "🧬",
 }
 
-# ─── Fichier de données pour les CV ───────────────────────────────────────────
-DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-CV_FILE = DATA_DIR / "cvs.json"
-
-def load_cvs():
-    """Charge la liste des CV depuis le fichier JSON."""
-    if not CV_FILE.exists():
-        # Données d'exemple (liens PDF factices)
-        default_cvs = [
-            {"id": 1, "title": "CV - Dr. Amara Diallo", "specialty": "Physique",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Spécialiste en physique des particules."},
-            {"id": 2, "title": "CV - Marcus Chen", "specialty": "Neurosciences",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Expert en neuroimagerie."},
-            {"id": 3, "title": "CV - Fatou Ndiaye", "specialty": "Astronomie",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Astronome spécialisée en analyse spectrale."},
-            {"id": 4, "title": "CV - Dr. Ibrahim Koné", "specialty": "Génie Electrique",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Ingénieur en simulation de circuits."},
-            {"id": 5, "title": "CV - Léa Fontaine", "specialty": "Chimie",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Chimiste computationnelle."},
-            {"id": 6, "title": "CV - Dr. Youssouf Barry", "specialty": "Mathématiques",
-             "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-             "description": "Mathématicien expert en calcul symbolique."},
-        ]
-        save_cvs(default_cvs)
-        return default_cvs
-    with open(CV_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_cvs(cvs):
-    with open(CV_FILE, "w", encoding="utf-8") as f:
-        json.dump(cvs, f, indent=2, ensure_ascii=False)
-
-def get_next_id(cvs):
-    return max((cv["id"] for cv in cvs), default=0) + 1
-
-# ─── Session State ─────────────────────────────────────────────────────────────
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
-
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin2024")
-
-# ─── CSS Thème (inchangé, très stylé) ─────────────────────────────────────────
+# ─── CSS Thème (style spatial/cyber) ───────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
@@ -88,9 +45,6 @@ st.markdown("""
     --bg-card2: #081526;
     --accent-cyan: #00e5ff;
     --accent-blue: #2979ff;
-    --accent-purple: #7c3aed;
-    --accent-green: #00e676;
-    --accent-amber: #ffab00;
     --text-primary: #e8f4fd;
     --text-secondary: #7fa8c9;
     --text-muted: #3d6080;
@@ -205,121 +159,69 @@ section[data-testid="stSidebar"] {
     box-shadow: var(--glow-cyan);
 }
 
-.spec-btn-active {
-    background: linear-gradient(135deg, rgba(0,229,255,0.2), rgba(41,121,255,0.2));
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
-    box-shadow: var(--glow-cyan);
-}
-
-/* Cartes CV */
-.cv-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1.5rem;
-}
-
-.cv-card {
+/* Carte du dossier */
+.folder-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 1.2rem;
+    border-radius: 20px;
+    padding: 2rem;
+    text-align: center;
+    max-width: 500px;
+    margin: 2rem auto;
     transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
 }
 
-.cv-card:hover {
+.folder-card:hover {
     border-color: var(--border-hover);
     background: var(--bg-card2);
     transform: translateY(-3px);
     box-shadow: var(--glow-cyan);
 }
 
-.cv-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.cv-card:hover::before {
-    opacity: 1;
-}
-
-.cv-icon {
-    font-size: 2.2rem;
-    margin-bottom: 0.5rem;
-}
-
-.cv-title {
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-}
-
-.cv-desc {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
+.folder-icon {
+    font-size: 3rem;
     margin-bottom: 1rem;
 }
 
-.cv-actions {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
+.folder-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
 }
 
-.cv-button {
-    background: rgba(0,229,255,0.08);
-    border: 1px solid rgba(0,229,255,0.25);
-    border-radius: 8px;
-    padding: 0.4rem 0.8rem;
+.folder-sub {
     font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+.drive-link {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(0,229,255,0.1), rgba(41,121,255,0.1));
+    border: 1px solid var(--accent-cyan);
+    border-radius: 40px;
+    padding: 0.7rem 1.8rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: bold;
     color: var(--accent-cyan);
     text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
     transition: all 0.2s;
 }
 
-.cv-button:hover {
+.drive-link:hover {
     background: rgba(0,229,255,0.2);
-    border-color: var(--accent-cyan);
-    transform: translateY(-1px);
-}
-
-.cv-delete {
-    background: rgba(255,60,60,0.1);
-    border-color: rgba(255,60,60,0.3);
-    color: #ff6b6b;
-    cursor: pointer;
-}
-
-.cv-delete:hover {
-    background: rgba(255,60,60,0.2);
-    border-color: #ff6b6b;
+    transform: translateY(-2px);
+    box-shadow: var(--glow-cyan);
+    color: var(--accent-cyan);
 }
 
 .empty-state {
     text-align: center;
     padding: 3rem;
     color: var(--text-muted);
-}
-
-.empty-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
 }
 
 .footer {
@@ -334,7 +236,7 @@ section[data-testid="stSidebar"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Sidebar ───────────────────────────────────────────────────────────────────
+# ─── Sidebar (informations) ────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
     <div class="sidebar-brand">
@@ -343,129 +245,61 @@ with st.sidebar:
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    st.markdown("### ⚙️ Administration")
-    if not st.session_state.admin_authenticated:
-        pwd = st.text_input("Mot de passe admin", type="password", placeholder="••••••••")
-        if st.button("Connexion", use_container_width=True):
-            if pwd == ADMIN_PASSWORD:
-                st.session_state.admin_authenticated = True
-                st.session_state.admin_mode = True
-                st.rerun()
-            else:
-                st.error("Mot de passe incorrect")
-    else:
-        st.success("✅ Mode admin actif")
-        if st.button("Déconnexion", use_container_width=True):
-            st.session_state.admin_authenticated = False
-            st.session_state.admin_mode = False
-            st.rerun()
-
+    st.markdown(f"**{len(SPECIALTY_DRIVE_FOLDERS)} domaines disponibles**")
     st.markdown("---")
-    st.markdown(f"**Total CV :** {len(load_cvs())}")
+    st.markdown("Cliquez sur un domaine pour accéder aux CV stockés dans son dossier Google Drive.")
 
 # ─── En-tête ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <div style="text-align: center; padding: 2rem 0 1rem;">
-    <div style="font-size: 2.5rem;">📄</div>
+    <div style="font-size: 2.5rem;">📂</div>
     <h1 style="font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2.5rem;">
         CV des <span style="color: #00e5ff;">Experts</span>
     </h1>
     <p style="color: #7fa8c9; max-width: 600px; margin: 0 auto;">
-        Parcourez les Curriculum Vitae de nos spécialistes par domaine scientifique.
+        Sélectionnez votre domaine pour consulter l’ensemble des Curriculum Vitae.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Sélection de la spécialité (14 boutons) ──────────────────────────────────
-st.markdown('<div class="specialty-buttons">', unsafe_allow_html=True)
-cols = st.columns(7)  # 2 lignes de 7
-for idx, spec in enumerate(SPECIALTIES):
+# ─── 14 boutons de spécialité (2 lignes de 7) ──────────────────────────────────
+if "selected_specialty" not in st.session_state:
+    st.session_state.selected_specialty = list(SPECIALTY_DRIVE_FOLDERS.keys())[0]
+
+# Affichage des boutons
+specialties = list(SPECIALTY_DRIVE_FOLDERS.keys())
+cols = st.columns(7)
+for idx, spec in enumerate(specialties):
     col = cols[idx % 7]
     icon = SPECIALTY_ICONS.get(spec, "📂")
-    # Utilisation de session state pour garder la spécialité sélectionnée
-    if "selected_specialty" not in st.session_state:
-        st.session_state.selected_specialty = SPECIALTIES[0]
-    active = st.session_state.selected_specialty == spec
-    btn_label = f"{icon} {spec}"
-    if col.button(btn_label, key=f"spec_{spec}", use_container_width=True,
-                  type="secondary" if not active else "primary"):
+    # Style actif si c'est la spécialité sélectionnée
+    if st.session_state.selected_specialty == spec:
+        btn = col.button(f"{icon} {spec}", key=f"btn_{spec}", use_container_width=True, type="primary")
+    else:
+        btn = col.button(f"{icon} {spec}", key=f"btn_{spec}", use_container_width=True, type="secondary")
+    if btn:
         st.session_state.selected_specialty = spec
         st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
 
-# ─── Affichage des CV pour la spécialité sélectionnée ─────────────────────────
+# ─── Affichage du dossier correspondant ────────────────────────────────────────
 selected = st.session_state.selected_specialty
-cvs = load_cvs()
-filtered_cvs = [cv for cv in cvs if cv["specialty"] == selected]
+drive_url = SPECIALTY_DRIVE_FOLDERS[selected]
+icon = SPECIALTY_ICONS.get(selected, "📂")
 
-st.markdown(f"## {SPECIALTY_ICONS.get(selected, '📁')} {selected}")
-st.caption(f"{len(filtered_cvs)} CV disponible(s)")
-
-if not filtered_cvs:
-    st.markdown(f"""
-    <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <p>Aucun CV pour la spécialité <strong>{selected}</strong>.</p>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    # Grille de CV
-    cols = st.columns(2)
-    for i, cv in enumerate(filtered_cvs):
-        with cols[i % 2]:
-            with st.container():
-                st.markdown(f"""
-                <div class="cv-card">
-                    <div class="cv-icon">📄</div>
-                    <div class="cv-title">{cv['title']}</div>
-                    <div class="cv-desc">{cv.get('description', '')}</div>
-                    <div class="cv-actions">
-                        <a href="{cv['file_url']}" target="_blank" class="cv-button">📖 Ouvrir le PDF</a>
-                """, unsafe_allow_html=True)
-                if st.session_state.admin_mode:
-                    if st.button("🗑 Supprimer", key=f"del_{cv['id']}", use_container_width=True):
-                        new_cvs = [c for c in load_cvs() if c["id"] != cv["id"]]
-                        save_cvs(new_cvs)
-                        st.success("CV supprimé")
-                        st.rerun()
-                st.markdown("</div></div>", unsafe_allow_html=True)
-
-# ─── Ajout de CV (mode admin) ─────────────────────────────────────────────────
-if st.session_state.admin_mode:
-    st.markdown("---")
-    st.markdown("## ➕ Ajouter un CV")
-    with st.form("add_cv_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            title = st.text_input("Titre du CV *", placeholder="ex: CV - Dr. Jean Dupont")
-            specialty = st.selectbox("Spécialité *", SPECIALTIES)
-        with c2:
-            file_url = st.text_input("Lien vers le PDF *", placeholder="https://...")
-            description = st.text_area("Description (optionnelle)", height=80)
-        submitted = st.form_submit_button("📄 Ajouter ce CV", use_container_width=True)
-        if submitted:
-            if not title or not specialty or not file_url:
-                st.error("Veuillez remplir tous les champs obligatoires.")
-            else:
-                all_cvs = load_cvs()
-                new_id = get_next_id(all_cvs)
-                all_cvs.append({
-                    "id": new_id,
-                    "title": title,
-                    "specialty": specialty,
-                    "file_url": file_url,
-                    "description": description
-                })
-                save_cvs(all_cvs)
-                st.success(f"CV « {title} » ajouté avec succès !")
-                st.rerun()
+st.markdown(f"""
+<div class="folder-card">
+    <div class="folder-icon">{icon}</div>
+    <div class="folder-title">{selected}</div>
+    <div class="folder-sub">Dossier Google Drive · CV des spécialistes</div>
+    <a href="{drive_url}" target="_blank" class="drive-link">📁 Ouvrir le dossier CV</a>
+</div>
+""", unsafe_allow_html=True)
 
 # ─── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="footer">
-    <span>⚛ AnnotaCore · CV par spécialité</span>
+    <span>⚛ AnnotaCore · Accès direct aux CV par spécialité</span>
     <span>—</span>
-    <span>Données mises à jour en temps réel</span>
+    <span>Liens mis à jour le 08/04/2026</span>
 </div>
 """, unsafe_allow_html=True)
