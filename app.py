@@ -1,9 +1,7 @@
 import streamlit as st
-import json
-import os
+import requests
 import re
 from pathlib import Path
-from datetime import datetime
 
 # ─── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -13,13 +11,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Specialties and Icons ─────────────────────────────────────────────────────
-SPECIALTIES = [
-    "Astronomy", "Chemistry", "Law", "Materials Engineering",
-    "Electrical Engineering", "History", "Mathematics", "Neuroscience",
-    "Philosophy", "Physics", "Psychology", "Information Science",
-    "Earth Sciences", "Life Sciences"
-]
+# ─── Specialty Folders (Google Drive folder links) ─────────────────────────────
+# These are the exact links you provided. We extract folder IDs automatically.
+SPECIALTY_FOLDERS = {
+    "Astronomy": "https://drive.google.com/drive/folders/1pP5ReGGCa7hl7xvN7Uq2ifaKO_9k7g52",
+    "Chemistry": "https://drive.google.com/drive/folders/1QTCIbzqHq_4A7uqsj4xt8zRgQGZYvhwH",
+    "Law": "https://drive.google.com/drive/folders/1CdRdDuJ8gAMY4HyYtPNMsPDByz7DsqFq",
+    "Materials Engineering": "https://drive.google.com/drive/folders/1kUEk83-j0G5RvoFTo4tj3xCyvK64Zgq2",
+    "Electrical Engineering": "https://drive.google.com/drive/folders/1bj3dQgHBPwfPyvAiYgzsxp64mHExPMSx",
+    "History": "https://drive.google.com/drive/folders/1IFVTa8tV9pE8HruPLhtKWCSkU8O3Qasa",
+    "Mathematics": "https://drive.google.com/drive/folders/192hXOppB_-0f7TPVGzQId0nb1wxbdsAO",
+    "Neuroscience": "https://drive.google.com/drive/folders/1UP45h2U6_6XVLpnBA-xvo1RltwRWIl5i",
+    "Philosophy": "https://drive.google.com/drive/folders/1LoJz1MZLt3WZ_9dQRziw21kHkdh8r8s_",
+    "Physics": "https://drive.google.com/drive/folders/1TViay4Os-Jyo2f2L592ZfDiBM608ZjL8",
+    "Psychology": "https://drive.google.com/drive/folders/15xzZQrYc6u43xXsLzlLbyedDaQv2duPd",
+    "Information Science": "https://drive.google.com/drive/folders/171wR4DVBONV6tvKLoaJMWVePC-hOcflN",
+    "Earth Sciences": "https://drive.google.com/drive/folders/1MnAOT99SJt7CVj5SjbQAa-McWg7_isVn",
+    "Life Sciences": "https://drive.google.com/drive/folders/1Y8TRFetyqn-KuP_XgaO6MjrYa2_Ku8bP",
+}
 
 SPECIALTY_ICONS = {
     "Astronomy": "🔭", "Chemistry": "⚗️", "Law": "⚖️",
@@ -29,77 +38,50 @@ SPECIALTY_ICONS = {
     "Earth Sciences": "🌍", "Life Sciences": "🧬",
 }
 
-# Map English specialty names back to original French if needed for drive links?
-# But we'll keep English for UI, user can adapt specialty names.
-
-# ─── Data file for CVs ─────────────────────────────────────────────────────────
-DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
-CV_FILE = DATA_DIR / "cvs.json"
-
-def load_cvs():
-    """Load CV list from JSON file."""
-    if not CV_FILE.exists():
-        # Example CVs (replace with your own)
-        default_cvs = [
-            {
-                "id": 1,
-                "title": "Dr. Amara Diallo - Particle Physics",
-                "specialty": "Physics",
-                "drive_link": "https://drive.google.com/file/d/1-example-id-1/preview",
-                "description": "Specialist in particle physics, ROOT data analysis."
-            },
-            {
-                "id": 2,
-                "title": "Marcus Chen - Neuroimaging",
-                "specialty": "Neuroscience",
-                "drive_link": "https://drive.google.com/file/d/1-example-id-2/preview",
-                "description": "Expert in EEG/fMRI signal processing."
-            }
-        ]
-        save_cvs(default_cvs)
-        return default_cvs
-    with open(CV_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_cvs(cvs):
-    with open(CV_FILE, "w", encoding="utf-8") as f:
-        json.dump(cvs, f, indent=2, ensure_ascii=False)
-
-def get_next_id(cvs):
-    return max((cv["id"] for cv in cvs), default=0) + 1
-
-def extract_preview_url(drive_link):
-    """Convert Google Drive share link to preview embed URL."""
-    # Pattern for standard drive link: https://drive.google.com/file/d/FILE_ID/view
-    match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', drive_link)
+# ─── Helper functions for Google Drive API ─────────────────────────────────────
+def extract_folder_id(url):
+    """Extract folder ID from Google Drive folder URL."""
+    match = re.search(r'folders/([a-zA-Z0-9_-]+)', url)
     if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/file/d/{file_id}/preview"
-    # If already a preview link, return as is
-    if "/preview" in drive_link:
-        return drive_link
-    return drive_link
+        return match.group(1)
+    return None
 
-def extract_download_url(drive_link):
-    """Extract direct download URL for Google Drive file."""
-    match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', drive_link)
-    if match:
-        file_id = match.group(1)
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
-    return drive_link
+def get_files_in_folder(folder_id, api_key):
+    """List all PDF files in a public Google Drive folder using API."""
+    url = f"https://www.googleapis.com/drive/v3/files"
+    params = {
+        "q": f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
+        "key": api_key,
+        "fields": "files(id, name, webViewLink, size)",
+        "pageSize": 100
+    }
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            files = response.json().get("files", [])
+            return files
+        else:
+            st.error(f"API error {response.status_code}: {response.text}")
+            return []
+    except Exception as e:
+        st.error(f"Failed to fetch files: {e}")
+        return []
 
-# ─── Session State ─────────────────────────────────────────────────────────────
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
+# ─── API Key from secrets ──────────────────────────────────────────────────────
+try:
+    DRIVE_API_KEY = st.secrets["DRIVE_API_KEY"]
+except:
+    DRIVE_API_KEY = None
+
+if not DRIVE_API_KEY:
+    st.error("⚠️ Google Drive API key not found. Please set DRIVE_API_KEY in .streamlit/secrets.toml")
+    st.stop()
+
+# ─── Session state for selected specialty ──────────────────────────────────────
 if "selected_specialty" not in st.session_state:
-    st.session_state.selected_specialty = SPECIALTIES[0]
+    st.session_state.selected_specialty = list(SPECIALTY_FOLDERS.keys())[0]
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin2024")
-
-# ─── CSS Theme (space/cyber style) ─────────────────────────────────────────────
+# ─── CSS Theme (same elegant style) ────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
@@ -245,6 +227,7 @@ section[data-testid="stSidebar"] {
     font-size: 1rem;
     color: var(--text-primary);
     margin-bottom: 0.5rem;
+    word-break: break-word;
 }
 
 .cv-desc {
@@ -283,17 +266,6 @@ section[data-testid="stSidebar"] {
     transform: translateY(-1px);
 }
 
-.cv-delete {
-    background: rgba(255,60,60,0.1);
-    border-color: rgba(255,60,60,0.3);
-    color: #ff6b6b;
-}
-
-.cv-delete:hover {
-    background: rgba(255,60,60,0.2);
-    border-color: #ff6b6b;
-}
-
 .empty-state {
     text-align: center;
     padding: 3rem;
@@ -316,7 +288,6 @@ section[data-testid="stSidebar"] {
     margin-top: 2rem;
 }
 
-/* Preview iframe */
 .preview-container {
     margin-top: 1rem;
     border-radius: 8px;
@@ -335,27 +306,9 @@ with st.sidebar:
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    st.markdown("### ⚙️ Admin")
-    if not st.session_state.admin_authenticated:
-        pwd = st.text_input("Admin password", type="password", placeholder="••••••••")
-        if st.button("Login", use_container_width=True):
-            if pwd == ADMIN_PASSWORD:
-                st.session_state.admin_authenticated = True
-                st.session_state.admin_mode = True
-                st.rerun()
-            else:
-                st.error("Incorrect password")
-    else:
-        st.success("✅ Admin mode active")
-        if st.button("Logout", use_container_width=True):
-            st.session_state.admin_authenticated = False
-            st.session_state.admin_mode = False
-            st.rerun()
-
+    st.markdown(f"**{len(SPECIALTY_FOLDERS)} specialties**")
     st.markdown("---")
-    total_cvs = len(load_cvs())
-    st.markdown(f"**Total CVs:** {total_cvs}")
+    st.markdown("CVs are fetched live from Google Drive folders.")
 
 # ─── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -365,15 +318,16 @@ st.markdown("""
         Expert <span style="color: #00e5ff;">CVs</span>
     </h1>
     <p style="color: #7fa8c9; max-width: 600px; margin: 0 auto;">
-        Browse, preview and download CVs by specialty — all on this site.
+        Browse, preview and download CVs by specialty — live from Google Drive.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
 # ─── Specialty Buttons (2 rows of 7) ──────────────────────────────────────────
+specialties = list(SPECIALTY_FOLDERS.keys())
 st.markdown('<div class="specialty-buttons">', unsafe_allow_html=True)
 cols = st.columns(7)
-for idx, spec in enumerate(SPECIALTIES):
+for idx, spec in enumerate(specialties):
     col = cols[idx % 7]
     icon = SPECIALTY_ICONS.get(spec, "📂")
     if st.session_state.selected_specialty == spec:
@@ -385,90 +339,69 @@ for idx, spec in enumerate(SPECIALTIES):
         st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
 
-# ─── Display CVs for selected specialty ────────────────────────────────────────
+# ─── Fetch and display CVs for selected specialty ──────────────────────────────
 selected = st.session_state.selected_specialty
-cvs = load_cvs()
-filtered_cvs = [cv for cv in cvs if cv["specialty"] == selected]
+folder_url = SPECIALTY_FOLDERS[selected]
+folder_id = extract_folder_id(folder_url)
 
 st.markdown(f"## {SPECIALTY_ICONS.get(selected, '📁')} {selected}")
-st.caption(f"{len(filtered_cvs)} CV(s) available")
 
-if not filtered_cvs:
-    st.markdown(f"""
-    <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <p>No CVs found for <strong>{selected}</strong>.<br>Admin can add CVs using the form below.</p>
-    </div>
-    """, unsafe_allow_html=True)
+if not folder_id:
+    st.error("Invalid folder URL.")
 else:
-    # Display CVs in a grid
-    cols = st.columns(2)
-    for i, cv in enumerate(filtered_cvs):
-        with cols[i % 2]:
-            preview_url = extract_preview_url(cv["drive_link"])
-            download_url = extract_download_url(cv["drive_link"])
-            with st.container():
-                st.markdown(f"""
-                <div class="cv-card">
-                    <div class="cv-title">📄 {cv['title']}</div>
-                    <div class="cv-desc">{cv.get('description', 'No description')}</div>
-                    <div class="cv-actions">
-                        <a href="{download_url}" class="cv-button" target="_blank">⬇️ Download</a>
-                """, unsafe_allow_html=True)
-                # Preview button toggles an iframe
-                preview_key = f"preview_{cv['id']}"
-                if st.button("🔍 Preview", key=f"btn_preview_{cv['id']}", use_container_width=True):
-                    st.session_state[preview_key] = not st.session_state.get(preview_key, False)
-                if st.session_state.get(preview_key, False):
+    with st.spinner("Fetching CVs from Google Drive..."):
+        files = get_files_in_folder(folder_id, DRIVE_API_KEY)
+    
+    if not files:
+        st.markdown(f"""
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No PDF CVs found in <strong>{selected}</strong> folder.<br>
+            Make sure the folder is public and contains PDF files.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.caption(f"{len(files)} CV(s) available")
+        # Display in 2-column grid
+        cols = st.columns(2)
+        for i, file in enumerate(files):
+            with cols[i % 2]:
+                file_id = file["id"]
+                file_name = file["name"]
+                # Preview URL (embed)
+                preview_url = f"https://drive.google.com/file/d/{file_id}/preview"
+                # Download URL
+                download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                
+                # Human-readable size
+                size_bytes = file.get("size", 0)
+                size_kb = int(size_bytes) / 1024 if size_bytes else 0
+                size_str = f"{size_kb:.0f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
+                
+                with st.container():
                     st.markdown(f"""
-                    <div class="preview-container">
-                        <iframe src="{preview_url}" width="100%" height="400" style="border:none;"></iframe>
-                    </div>
+                    <div class="cv-card">
+                        <div class="cv-title">📄 {file_name}</div>
+                        <div class="cv-desc">Size: {size_str}</div>
+                        <div class="cv-actions">
+                            <a href="{download_url}" class="cv-button" target="_blank">⬇️ Download</a>
                     """, unsafe_allow_html=True)
-                st.markdown("</div></div>", unsafe_allow_html=True)
-
-                if st.session_state.admin_mode:
-                    if st.button("🗑 Delete", key=f"del_{cv['id']}", use_container_width=True):
-                        new_cvs = [c for c in load_cvs() if c["id"] != cv["id"]]
-                        save_cvs(new_cvs)
-                        st.success("CV deleted")
-                        st.rerun()
-
-# ─── Admin: Add new CV ─────────────────────────────────────────────────────────
-if st.session_state.admin_mode:
-    st.markdown("---")
-    st.markdown("## ➕ Add a new CV")
-    with st.form("add_cv_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            title = st.text_input("CV Title *", placeholder="e.g., Dr. Jane Smith - Machine Learning")
-            specialty = st.selectbox("Specialty *", SPECIALTIES)
-        with col2:
-            drive_link = st.text_input("Google Drive Link *", placeholder="https://drive.google.com/file/d/.../view")
-            description = st.text_area("Description (optional)", height=80)
-        submitted = st.form_submit_button("📄 Add CV", use_container_width=True)
-        if submitted:
-            if not title or not specialty or not drive_link:
-                st.error("Please fill all required fields.")
-            else:
-                all_cvs = load_cvs()
-                new_id = get_next_id(all_cvs)
-                all_cvs.append({
-                    "id": new_id,
-                    "title": title,
-                    "specialty": specialty,
-                    "drive_link": drive_link,
-                    "description": description
-                })
-                save_cvs(all_cvs)
-                st.success(f"CV '{title}' added successfully!")
-                st.rerun()
+                    preview_key = f"preview_{file_id}"
+                    if st.button("🔍 Preview", key=f"preview_btn_{file_id}", use_container_width=True):
+                        st.session_state[preview_key] = not st.session_state.get(preview_key, False)
+                    if st.session_state.get(preview_key, False):
+                        st.markdown(f"""
+                        <div class="preview-container">
+                            <iframe src="{preview_url}" width="100%" height="400" style="border:none;"></iframe>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ─── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="footer">
-    <span>⚛ AnnotaCore · CV Management System</span>
+    <span>⚛ AnnotaCore · Live CVs from Google Drive</span>
     <span>—</span>
-    <span>Data updated in real time</span>
+    <span>Updated automatically</span>
 </div>
 """, unsafe_allow_html=True)
