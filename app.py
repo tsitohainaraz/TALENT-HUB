@@ -1,407 +1,387 @@
 import streamlit as st
-import requests
-import re
+import pandas as pd
+import json
+import os
+from datetime import datetime, date
 from pathlib import Path
+import base64
 
 # ─── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AnnotaCore — CV by Specialty",
-    page_icon="📄",
+    page_title="TalentHub — Team Profiles",
+    page_icon="✦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ─── Specialty Folders (Google Drive folder links) ─────────────────────────────
-# These are the exact links you provided. We extract folder IDs automatically.
-SPECIALTY_FOLDERS = {
-    "Astronomy": "https://drive.google.com/drive/folders/1pP5ReGGCa7hl7xvN7Uq2ifaKO_9k7g52",
-    "Chemistry": "https://drive.google.com/drive/folders/1QTCIbzqHq_4A7uqsj4xt8zRgQGZYvhwH",
-    "Law": "https://drive.google.com/drive/folders/1CdRdDuJ8gAMY4HyYtPNMsPDByz7DsqFq",
-    "Materials Engineering": "https://drive.google.com/drive/folders/1kUEk83-j0G5RvoFTo4tj3xCyvK64Zgq2",
-    "Electrical Engineering": "https://drive.google.com/drive/folders/1bj3dQgHBPwfPyvAiYgzsxp64mHExPMSx",
-    "History": "https://drive.google.com/drive/folders/1IFVTa8tV9pE8HruPLhtKWCSkU8O3Qasa",
-    "Mathematics": "https://drive.google.com/drive/folders/192hXOppB_-0f7TPVGzQId0nb1wxbdsAO",
-    "Neuroscience": "https://drive.google.com/drive/folders/1UP45h2U6_6XVLpnBA-xvo1RltwRWIl5i",
-    "Philosophy": "https://drive.google.com/drive/folders/1LoJz1MZLt3WZ_9dQRziw21kHkdh8r8s_",
-    "Physics": "https://drive.google.com/drive/folders/1TViay4Os-Jyo2f2L592ZfDiBM608ZjL8",
-    "Psychology": "https://drive.google.com/drive/folders/15xzZQrYc6u43xXsLzlLbyedDaQv2duPd",
-    "Information Science": "https://drive.google.com/drive/folders/171wR4DVBONV6tvKLoaJMWVePC-hOcflN",
-    "Earth Sciences": "https://drive.google.com/drive/folders/1MnAOT99SJt7CVj5SjbQAa-McWg7_isVn",
-    "Life Sciences": "https://drive.google.com/drive/folders/1Y8TRFetyqn-KuP_XgaO6MjrYa2_Ku8bP",
-}
+# ─── Load CSS ──────────────────────────────────────────────────────────────────
+def load_css():
+    css_path = Path(__file__).parent / "style.css"
+    if css_path.exists():
+        with open(css_path) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-SPECIALTY_ICONS = {
-    "Astronomy": "🔭", "Chemistry": "⚗️", "Law": "⚖️",
-    "Materials Engineering": "🧱", "Electrical Engineering": "⚡", "History": "📜",
-    "Mathematics": "∑", "Neuroscience": "🧠", "Philosophy": "💡",
-    "Physics": "⚛️", "Psychology": "🧘", "Information Science": "💻",
-    "Earth Sciences": "🌍", "Life Sciences": "🧬",
-}
+load_css()
 
-# ─── Helper functions for Google Drive API ─────────────────────────────────────
-def extract_folder_id(url):
-    """Extract folder ID from Google Drive folder URL."""
-    match = re.search(r'folders/([a-zA-Z0-9_-]+)', url)
-    if match:
-        return match.group(1)
-    return None
+# ─── Data Helpers ──────────────────────────────────────────────────────────────
+DATA_FILE = Path(__file__).parent / "data" / "profiles.json"
 
-def get_files_in_folder(folder_id, api_key):
-    """List all PDF files in a public Google Drive folder using API."""
-    url = f"https://www.googleapis.com/drive/v3/files"
-    params = {
-        "q": f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
-        "key": api_key,
-        "fields": "files(id, name, webViewLink, size)",
-        "pageSize": 100
-    }
-    try:
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            files = response.json().get("files", [])
-            return files
+def load_profiles():
+    DATA_FILE.parent.mkdir(exist_ok=True)
+    if not DATA_FILE.exists():
+        default = [
+            {
+                "id": 1, "name": "Dr. Sarah Okonkwo", "specialty": "Psychology",
+                "education": "PhD", "gender": "Female",
+                "manual_status": "Open", "scheduled_date": None,
+                "gdrive_link": "https://drive.google.com/file/d/example1/view",
+                "bio": "Specialist in cognitive behavioral therapy and organizational psychology.",
+                "photo_initial": "SO"
+            },
+            {
+                "id": 2, "name": "Marcus Dubois", "specialty": "History",
+                "education": "Master", "gender": "Male",
+                "manual_status": "Occupied", "scheduled_date": "2026-05-04",
+                "gdrive_link": "https://drive.google.com/file/d/example2/view",
+                "bio": "Expert in modern European history and archival research methods.",
+                "photo_initial": "MD"
+            },
+            {
+                "id": 3, "name": "Amina Traoré", "specialty": "Sociology",
+                "education": "PhD", "gender": "Female",
+                "manual_status": "Open", "scheduled_date": None,
+                "gdrive_link": "https://drive.google.com/file/d/example3/view",
+                "bio": "Researcher focused on social structures and community development in Sub-Saharan Africa.",
+                "photo_initial": "AT"
+            },
+            {
+                "id": 4, "name": "James Whitfield", "specialty": "Economics",
+                "education": "Bachelor", "gender": "Male",
+                "manual_status": "Occupied", "scheduled_date": None,
+                "gdrive_link": "https://drive.google.com/file/d/example4/view",
+                "bio": "Analyst specializing in macroeconomic modeling and policy evaluation.",
+                "photo_initial": "JW"
+            },
+            {
+                "id": 5, "name": "Layla Haddad", "specialty": "Political Science",
+                "education": "Master", "gender": "Female",
+                "manual_status": "Open", "scheduled_date": None,
+                "gdrive_link": "https://drive.google.com/file/d/example5/view",
+                "bio": "Specialist in Middle Eastern politics and international relations.",
+                "photo_initial": "LH"
+            },
+            {
+                "id": 6, "name": "Chen Wei", "specialty": "Anthropology",
+                "education": "PhD", "gender": "Male",
+                "manual_status": "Occupied", "scheduled_date": "2026-06-01",
+                "gdrive_link": "https://drive.google.com/file/d/example6/view",
+                "bio": "Cultural anthropologist with fieldwork experience across Southeast Asia.",
+                "photo_initial": "CW"
+            },
+        ]
+        with open(DATA_FILE, "w") as f:
+            json.dump(default, f, indent=2)
+    with open(DATA_FILE) as f:
+        return json.load(f)
+
+def save_profiles(profiles):
+    with open(DATA_FILE, "w") as f:
+        json.dump(profiles, f, indent=2)
+
+def get_effective_status(profile):
+    today = date.today()
+    if profile.get("scheduled_date"):
+        scheduled = datetime.strptime(profile["scheduled_date"], "%Y-%m-%d").date()
+        if today < scheduled:
+            return "Occupied", f"Available after {scheduled.strftime('%d/%m/%Y')}"
         else:
-            st.error(f"API error {response.status_code}: {response.text}")
-            return []
-    except Exception as e:
-        st.error(f"Failed to fetch files: {e}")
-        return []
+            return "Open", "Available"
+    status = profile.get("manual_status", "Open")
+    return status, "Available" if status == "Open" else "Occupied"
 
-# ─── API Key from secrets ──────────────────────────────────────────────────────
-try:
-    DRIVE_API_KEY = st.secrets["DRIVE_API_KEY"]
-except:
-    DRIVE_API_KEY = None
+def get_next_id(profiles):
+    return max((p["id"] for p in profiles), default=0) + 1
 
-if not DRIVE_API_KEY:
-    st.error("⚠️ Google Drive API key not found. Please set DRIVE_API_KEY in .streamlit/secrets.toml")
-    st.stop()
+# ─── Session State ─────────────────────────────────────────────────────────────
+if "admin_mode" not in st.session_state:
+    st.session_state.admin_mode = False
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
 
-# ─── Session state for selected specialty ──────────────────────────────────────
-if "selected_specialty" not in st.session_state:
-    st.session_state.selected_specialty = list(SPECIALTY_FOLDERS.keys())[0]
-
-# ─── CSS Theme (same elegant style) ────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
-
-:root {
-    --bg-deep: #020812;
-    --bg-card: #060f1e;
-    --bg-card2: #081526;
-    --accent-cyan: #00e5ff;
-    --accent-blue: #2979ff;
-    --text-primary: #e8f4fd;
-    --text-secondary: #7fa8c9;
-    --text-muted: #3d6080;
-    --border: rgba(0,229,255,0.12);
-    --border-hover: rgba(0,229,255,0.35);
-    --glow-cyan: 0 0 30px rgba(0,229,255,0.15);
-}
-
-.stApp {
-    background: var(--bg-deep) !important;
-    font-family: 'Inter', sans-serif;
-    color: var(--text-primary);
-}
-
-/* Starfield background */
-.stApp::before {
-    content: '';
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background-image:
-        radial-gradient(1px 1px at 10% 20%, rgba(0,229,255,0.6) 0%, transparent 100%),
-        radial-gradient(1px 1px at 30% 60%, rgba(255,255,255,0.4) 0%, transparent 100%),
-        radial-gradient(1px 1px at 50% 10%, rgba(0,229,255,0.5) 0%, transparent 100%),
-        radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.3) 0%, transparent 100%),
-        radial-gradient(1px 1px at 85% 35%, rgba(0,229,255,0.5) 0%, transparent 100%),
-        radial-gradient(1px 1px at 20% 90%, rgba(255,255,255,0.5) 0%, transparent 100%),
-        radial-gradient(1px 1px at 60% 45%, rgba(41,121,255,0.5) 0%, transparent 100%),
-        radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
-        radial-gradient(2px 2px at 40% 30%, rgba(0,229,255,0.3) 0%, transparent 100%),
-        radial-gradient(2px 2px at 75% 15%, rgba(41,121,255,0.4) 0%, transparent 100%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Grid overlay */
-.stApp::after {
-    content: '';
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background-image:
-        linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
-    background-size: 60px 60px;
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #020c1a 0%, #030e1f 100%) !important;
-    border-right: 1px solid var(--border) !important;
-}
-
-.sidebar-brand {
-    text-align: center;
-    padding: 1.5rem 0 1rem;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 1.5rem;
-}
-
-.sidebar-logo {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 1.6rem;
-    color: var(--accent-cyan);
-    letter-spacing: -0.02em;
-    text-shadow: 0 0 20px rgba(0,229,255,0.5);
-}
-
-.sidebar-logo span {
-    color: var(--text-secondary);
-    font-size: 0.65rem;
-    font-family: 'Space Mono', monospace;
-    letter-spacing: 0.15em;
-    display: block;
-    margin-top: 4px;
-    text-transform: uppercase;
-}
-
-/* Specialty buttons */
-.specialty-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin: 2rem 0 2rem;
-    justify-content: center;
-}
-
-/* CV Cards */
-.cv-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1.5rem;
-}
-
-.cv-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 1.2rem;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.cv-card:hover {
-    border-color: var(--border-hover);
-    background: var(--bg-card2);
-    transform: translateY(-3px);
-    box-shadow: var(--glow-cyan);
-}
-
-.cv-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.cv-card:hover::before {
-    opacity: 1;
-}
-
-.cv-title {
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-    word-break: break-word;
-}
-
-.cv-desc {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
-    margin-bottom: 1rem;
-}
-
-.cv-actions {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.cv-button {
-    background: rgba(0,229,255,0.08);
-    border: 1px solid rgba(0,229,255,0.25);
-    border-radius: 8px;
-    padding: 0.4rem 0.8rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
-    color: var(--accent-cyan);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    transition: all 0.2s;
-    cursor: pointer;
-}
-
-.cv-button:hover {
-    background: rgba(0,229,255,0.2);
-    border-color: var(--accent-cyan);
-    transform: translateY(-1px);
-}
-
-.empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: var(--text-muted);
-}
-
-.empty-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-}
-
-.footer {
-    text-align: center;
-    padding: 2rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.6rem;
-    color: var(--text-muted);
-    border-top: 1px solid var(--border);
-    margin-top: 2rem;
-}
-
-.preview-container {
-    margin-top: 1rem;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-}
-</style>
-""", unsafe_allow_html=True)
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin2024")
 
 # ─── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
-    <div class="sidebar-brand">
-        <div class="sidebar-logo">📄 AnnotaCore
-            <span>CV by Specialty</span>
-        </div>
+    <div class="sidebar-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">TalentHub</span>
     </div>
     """, unsafe_allow_html=True)
-    st.markdown(f"**{len(SPECIALTY_FOLDERS)} specialties**")
+
+    st.markdown('<p class="sidebar-subtitle">Find the right expert for your project</p>', unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("CVs are fetched live from Google Drive folders.")
+
+    # ── Filters ──
+    st.markdown('<p class="filter-label">🔍 FILTERS</p>', unsafe_allow_html=True)
+
+    profiles_all = load_profiles()
+    specialties = sorted(set(p["specialty"] for p in profiles_all))
+    educations = ["Bachelor", "Master", "PhD"]
+
+    filter_status = st.selectbox("Availability", ["All", "Open", "Occupied"])
+    filter_specialty = st.multiselect("Specialty", specialties, placeholder="All specialties")
+    filter_education = st.multiselect("Education Level", educations, placeholder="All levels")
+    filter_gender = st.selectbox("Gender", ["All", "Female", "Male"])
+
+    st.markdown("---")
+
+    # ── Admin Login ──
+    st.markdown('<p class="filter-label">⚙️ ADMIN</p>', unsafe_allow_html=True)
+    if not st.session_state.admin_authenticated:
+        pwd = st.text_input("Admin Password", type="password", placeholder="Enter password")
+        if st.button("Login", use_container_width=True):
+            if pwd == ADMIN_PASSWORD:
+                st.session_state.admin_authenticated = True
+                st.session_state.admin_mode = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
+    else:
+        st.success("✓ Admin mode active")
+        if st.button("Logout", use_container_width=True):
+            st.session_state.admin_authenticated = False
+            st.session_state.admin_mode = False
+            st.rerun()
 
 # ─── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="text-align: center; padding: 2rem 0 1rem;">
-    <div style="font-size: 2.5rem;">📂</div>
-    <h1 style="font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2.5rem;">
-        Expert <span style="color: #00e5ff;">CVs</span>
-    </h1>
-    <p style="color: #7fa8c9; max-width: 600px; margin: 0 auto;">
-        Browse, preview and download CVs by specialty — live from Google Drive.
-    </p>
+<div class="hero-section">
+    <div class="hero-tag">TEAM DIRECTORY</div>
+    <h1 class="hero-title">Our Expert Talent Pool</h1>
+    <p class="hero-sub">Browse, filter, and connect with our specialists. Download their CVs and check real-time availability.</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Specialty Buttons (2 rows of 7) ──────────────────────────────────────────
-specialties = list(SPECIALTY_FOLDERS.keys())
-st.markdown('<div class="specialty-buttons">', unsafe_allow_html=True)
-cols = st.columns(7)
-for idx, spec in enumerate(specialties):
-    col = cols[idx % 7]
-    icon = SPECIALTY_ICONS.get(spec, "📂")
-    if st.session_state.selected_specialty == spec:
-        btn = col.button(f"{icon} {spec}", key=f"spec_{spec}", use_container_width=True, type="primary")
-    else:
-        btn = col.button(f"{icon} {spec}", key=f"spec_{spec}", use_container_width=True, type="secondary")
-    if btn:
-        st.session_state.selected_specialty = spec
-        st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
+# ─── Load & Filter ─────────────────────────────────────────────────────────────
+profiles = load_profiles()
 
-# ─── Fetch and display CVs for selected specialty ──────────────────────────────
-selected = st.session_state.selected_specialty
-folder_url = SPECIALTY_FOLDERS[selected]
-folder_id = extract_folder_id(folder_url)
+# Apply scheduled date logic
+for p in profiles:
+    eff_status, eff_label = get_effective_status(p)
+    p["_effective_status"] = eff_status
+    p["_status_label"] = eff_label
 
-st.markdown(f"## {SPECIALTY_ICONS.get(selected, '📁')} {selected}")
+# Apply filters
+filtered = profiles
+if filter_status != "All":
+    filtered = [p for p in filtered if p["_effective_status"] == filter_status]
+if filter_specialty:
+    filtered = [p for p in filtered if p["specialty"] in filter_specialty]
+if filter_education:
+    filtered = [p for p in filtered if p["education"] in filter_education]
+if filter_gender != "All":
+    filtered = [p for p in filtered if p["gender"] == filter_gender]
 
-if not folder_id:
-    st.error("Invalid folder URL.")
+# ─── Stats Bar ─────────────────────────────────────────────────────────────────
+total = len(profiles)
+open_count = sum(1 for p in profiles if p["_effective_status"] == "Open")
+occupied_count = total - open_count
+
+st.markdown(f"""
+<div class="stats-bar">
+    <div class="stat-item">
+        <span class="stat-number">{total}</span>
+        <span class="stat-label">Total Experts</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number open-num">{open_count}</span>
+        <span class="stat-label">Available Now</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number occ-num">{occupied_count}</span>
+        <span class="stat-label">Currently Engaged</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+        <span class="stat-number">{len(filtered)}</span>
+        <span class="stat-label">Showing</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ─── Profile Cards ─────────────────────────────────────────────────────────────
+if not filtered:
+    st.markdown("""
+    <div class="empty-state">
+        <div class="empty-icon">🔎</div>
+        <p>No profiles match your current filters.</p>
+    </div>
+    """, unsafe_allow_html=True)
 else:
-    with st.spinner("Fetching CVs from Google Drive..."):
-        files = get_files_in_folder(folder_id, DRIVE_API_KEY)
-    
-    if not files:
-        st.markdown(f"""
-        <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <p>No PDF CVs found in <strong>{selected}</strong> folder.<br>
-            Make sure the folder is public and contains PDF files.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.caption(f"{len(files)} CV(s) available")
-        # Display in 2-column grid
-        cols = st.columns(2)
-        for i, file in enumerate(files):
-            with cols[i % 2]:
-                file_id = file["id"]
-                file_name = file["name"]
-                # Preview URL (embed)
-                preview_url = f"https://drive.google.com/file/d/{file_id}/preview"
-                # Download URL
-                download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                
-                # Human-readable size
-                size_bytes = file.get("size", 0)
-                size_kb = int(size_bytes) / 1024 if size_bytes else 0
-                size_str = f"{size_kb:.0f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
-                
-                with st.container():
-                    st.markdown(f"""
-                    <div class="cv-card">
-                        <div class="cv-title">📄 {file_name}</div>
-                        <div class="cv-desc">Size: {size_str}</div>
-                        <div class="cv-actions">
-                            <a href="{download_url}" class="cv-button" target="_blank">⬇️ Download</a>
-                    """, unsafe_allow_html=True)
-                    preview_key = f"preview_{file_id}"
-                    if st.button("🔍 Preview", key=f"preview_btn_{file_id}", use_container_width=True):
-                        st.session_state[preview_key] = not st.session_state.get(preview_key, False)
-                    if st.session_state.get(preview_key, False):
-                        st.markdown(f"""
-                        <div class="preview-container">
-                            <iframe src="{preview_url}" width="100%" height="400" style="border:none;"></iframe>
+    # 3-column grid
+    cols_per_row = 3
+    rows = [filtered[i:i+cols_per_row] for i in range(0, len(filtered), cols_per_row)]
+
+    for row in rows:
+        cols = st.columns(cols_per_row)
+        for idx, profile in enumerate(row):
+            with cols[idx]:
+                eff_status = profile["_effective_status"]
+                status_label = profile["_status_label"]
+                status_class = "open" if eff_status == "Open" else "occupied"
+                sched_note = ""
+                if profile.get("scheduled_date"):
+                    sched = datetime.strptime(profile["scheduled_date"], "%Y-%m-%d").date()
+                    if date.today() < sched:
+                        sched_note = f'<div class="sched-note">🗓 Available after {sched.strftime("%d/%m/%Y")}</div>'
+
+                edu_icons = {"Bachelor": "🎓", "Master": "📚", "PhD": "🏛️"}
+                edu_icon = edu_icons.get(profile["education"], "🎓")
+                gender_icon = "♀" if profile["gender"] == "Female" else "♂"
+
+                initials = profile.get("photo_initial", profile["name"][:2].upper())
+
+                card_html = f"""
+                <div class="profile-card">
+                    <div class="card-header">
+                        <div class="avatar avatar-{status_class}">{initials}</div>
+                        <div class="card-meta">
+                            <h3 class="card-name">{profile['name']}</h3>
+                            <p class="card-specialty">{profile['specialty']}</p>
                         </div>
-                        """, unsafe_allow_html=True)
-                    st.markdown("</div></div>", unsafe_allow_html=True)
+                    </div>
+                    <div class="card-tags">
+                        <span class="tag tag-edu">{edu_icon} {profile['education']}</span>
+                        <span class="tag tag-gender">{gender_icon} {profile['gender']}</span>
+                    </div>
+                    <p class="card-bio">{profile.get('bio', '')}</p>
+                    {sched_note}
+                    <div class="status-badge status-{status_class}">{eff_status}</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+
+                # Download button
+                gdrive = profile.get("gdrive_link", "")
+                if gdrive and "example" not in gdrive:
+                    # Convert view link to direct download
+                    if "/view" in gdrive:
+                        file_id = gdrive.split("/d/")[1].split("/")[0] if "/d/" in gdrive else ""
+                        if file_id:
+                            dl_link = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        else:
+                            dl_link = gdrive
+                    else:
+                        dl_link = gdrive
+                    st.markdown(f"""
+                    <a href="{dl_link}" target="_blank" class="dl-button">
+                        ⬇ Download CV
+                    </a>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="dl-button-disabled">CV not uploaded yet</div>', unsafe_allow_html=True)
+
+                # Admin Controls
+                if st.session_state.admin_mode:
+                    with st.expander("⚙️ Edit Profile", expanded=False):
+                        pid = profile["id"]
+
+                        new_status = st.selectbox(
+                            "Status", ["Open", "Occupied"],
+                            index=0 if profile["manual_status"] == "Open" else 1,
+                            key=f"status_{pid}"
+                        )
+
+                        sched_val = None
+                        if profile.get("scheduled_date"):
+                            sched_val = datetime.strptime(profile["scheduled_date"], "%Y-%m-%d").date()
+
+                        new_date = st.date_input(
+                            "Available after (optional)",
+                            value=sched_val,
+                            min_value=date.today(),
+                            key=f"date_{pid}",
+                            help="Set a future date; profile shows as Occupied until then."
+                        )
+                        clear_date = st.checkbox("Clear scheduled date", key=f"clear_{pid}")
+
+                        new_link = st.text_input(
+                            "Google Drive Link",
+                            value=profile.get("gdrive_link", ""),
+                            key=f"link_{pid}",
+                            placeholder="https://drive.google.com/file/d/..."
+                        )
+
+                        if st.button("💾 Save", key=f"save_{pid}", use_container_width=True):
+                            all_profiles = load_profiles()
+                            for p in all_profiles:
+                                if p["id"] == pid:
+                                    p["manual_status"] = new_status
+                                    p["gdrive_link"] = new_link
+                                    if clear_date:
+                                        p["scheduled_date"] = None
+                                    elif new_date:
+                                        p["scheduled_date"] = new_date.strftime("%Y-%m-%d")
+                            save_profiles(all_profiles)
+                            st.success("Saved!")
+                            st.rerun()
+
+# ─── Admin: Add New Profile ────────────────────────────────────────────────────
+if st.session_state.admin_mode:
+    st.markdown("---")
+    st.markdown('<h2 class="section-title">➕ Add New Profile</h2>', unsafe_allow_html=True)
+
+    with st.form("add_profile_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            new_name = st.text_input("Full Name *", placeholder="e.g. Dr. Jane Smith")
+            new_specialty = st.text_input("Specialty *", placeholder="e.g. Psychology")
+            new_bio = st.text_area("Short Bio", placeholder="Brief description of expertise…", height=80)
+        with c2:
+            new_education = st.selectbox("Education Level *", ["Bachelor", "Master", "PhD"])
+            new_gender = st.selectbox("Gender *", ["Female", "Male"])
+            new_link = st.text_input("Google Drive CV Link", placeholder="https://drive.google.com/file/d/…")
+
+        c3, c4 = st.columns(2)
+        with c3:
+            new_status = st.selectbox("Initial Status", ["Open", "Occupied"])
+        with c4:
+            new_avail_date = st.date_input("Scheduled availability date (optional)", value=None, min_value=date.today())
+
+        submitted = st.form_submit_button("✦ Add Profile", use_container_width=True)
+        if submitted:
+            if not new_name or not new_specialty:
+                st.error("Name and Specialty are required.")
+            else:
+                all_p = load_profiles()
+                initials = "".join([w[0].upper() for w in new_name.split()[:2]])
+                new_profile = {
+                    "id": get_next_id(all_p),
+                    "name": new_name,
+                    "specialty": new_specialty,
+                    "education": new_education,
+                    "gender": new_gender,
+                    "manual_status": new_status,
+                    "scheduled_date": new_avail_date.strftime("%Y-%m-%d") if new_avail_date else None,
+                    "gdrive_link": new_link,
+                    "bio": new_bio,
+                    "photo_initial": initials,
+                }
+                all_p.append(new_profile)
+                save_profiles(all_p)
+                st.success(f"✓ Profile for **{new_name}** added successfully!")
+                st.rerun()
 
 # ─── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="footer">
-    <span>⚛ AnnotaCore · Live CVs from Google Drive</span>
-    <span>—</span>
-    <span>Updated automatically</span>
+    <span>✦ TalentHub</span>
+    <span>·</span>
+    <span>Professional Talent Directory</span>
+    <span>·</span>
+    <span>All profiles updated in real-time</span>
 </div>
 """, unsafe_allow_html=True)
